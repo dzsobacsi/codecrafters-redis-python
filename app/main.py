@@ -1,10 +1,22 @@
 import asyncio
 
+def parse(command: str):
+    return [w for w in command.split('\r\n') if w != '' and w[0] not in ['*', '$', ':', '+', '-']]
+
 
 async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-    while await reader.read(1024):
-        writer.write(b"+PONG\r\n")
-        await writer.drain()
+    while data := await reader.read(1024):
+        input = parse(data.decode())
+        command = input[0]
+        args = input[1:]
+
+        if command == 'PING':
+            writer.write(b"+PONG\r\n")
+            await writer.drain()
+
+        elif command == 'ECHO':
+            writer.write(f"+{args[0]}\r\n".encode('utf-8'))
+            await writer.drain()
 
 
 async def start_server(port: int, host: str = 'localhost'):
