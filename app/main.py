@@ -1,5 +1,7 @@
 from argparse import ArgumentParser, Namespace
 import asyncio
+import socket
+
 from app.command_handler import parse_input, get_response
 from app.keyvaluestore import KeyValueStore
 
@@ -29,12 +31,23 @@ async def handle_client(
         await writer.drain()
 
 
+def handshake(args):
+    connection = socket.create_connection(args.replicaof.split())
+    connection.sendall(b"*1\r\n$4\r\nPING\r\n")
+
+
 async def start_server(args: Namespace):
     store = KeyValueStore()
     state = KeyValueStore()
-    state.set('role', 'slave' if args.replicaof else 'master')
+    state.set('role', 'master')
     state.set('master_replid', '8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb')
     state.set('master_repl_offset', 0)
+
+    if args.replicaof:
+        state.set('role', 'slave')
+        handshake(args)
+
+
     host = 'localhost'
     port = args.port
     server = await asyncio.start_server(
