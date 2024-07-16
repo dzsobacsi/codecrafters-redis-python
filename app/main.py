@@ -1,6 +1,6 @@
 import asyncio
+from keyvaluestore import KeyValueStore
 
-memory = {}
 
 def parse(command: str):
     return [
@@ -10,12 +10,7 @@ def parse(command: str):
     ]
 
 
-async def delayed_mem_purge(key: str, ms: int):
-    await asyncio.sleep(ms / 1000)
-    memory.pop(key, None)
-
-
-async def get_response(command: str, *args):
+async def get_response(command: str, store: KeyValueStore, *args):
     if command == 'PING':
         return "+PONG\r\n"
 
@@ -23,31 +18,34 @@ async def get_response(command: str, *args):
         return f"+{args[0]}\r\n"
 
     elif command == 'SET':
-        memory[args[0]] = args[1]
+        store.set(args[0], args[1])
         if len(args) >= 4 and args[2].upper() == 'PX':
-            coroutine = delayed_mem_purge(args[0], int(args[3]))
-            asyncio.create_task(coroutine)
+            coro = store.expire(args[0], int(args[3]))
+            asyncio.create_task(coro)
         return "+OK\r\n"
 
     elif command == 'GET':
-        value = memory.get(args[0])
+        value = store.get(args[0])
         return f"+{value}\r\n" if value else "$-1\r\n"
 
     return "-ERR unknown command\r\n"
 
 
-async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, store: KeyValueStore):
     while data := await reader.read(1024):
         input = parse(data.decode())
         command = input[0].upper()
         args = input[1:]
-        response = await get_response(command, *args)
+        response = await get_response(command, store, *args)
         writer.write(response.encode('utf-8'))
         await writer.drain()
 
 
 async def start_server(port: int, host: str = 'localhost'):
-    server = await asyncio.start_server(handle_client, host, port)
+    store = KeyValueStore()
+    server = await asyncio.start_server(
+        lambda r, w: handle_client(r, w, store), host, port
+    )
     async with server:
         print(f"Listening on {host}, port: {port} ")
         await server.serve_forever()
