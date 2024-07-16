@@ -1,5 +1,6 @@
+from argparse import Namespace
 import asyncio
-from keyvaluestore import KeyValueStore
+from app.keyvaluestore import KeyValueStore
 
 
 def parse_input(command: str):
@@ -10,7 +11,7 @@ def parse_input(command: str):
     ]
 
 
-async def get_response(command: str, store: KeyValueStore, *args):
+async def get_response(command: str, store: KeyValueStore, server_args: Namespace, *args):
     if command == 'ECHO':
         return f"+{args[0]}\r\n"
     
@@ -19,7 +20,7 @@ async def get_response(command: str, store: KeyValueStore, *args):
         return f"+{value}\r\n" if value else "$-1\r\n"
     
     elif command == 'INFO':
-        return "$11\r\nrole:master\r\n"
+        return "$10\r\nrole:slave\r\n" if server_args.replicaof else "$11\r\nrole:master\r\n"
     
     elif command == 'PING':
         return "+PONG\r\n"
