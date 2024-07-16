@@ -1,8 +1,17 @@
+import argparse
 import asyncio
 from keyvaluestore import KeyValueStore
 
+def get_args():
+    parser = argparse.ArgumentParser(
+        description="Redis - My own implementation of a Redis-like server")
+    parser.add_argument("-p", "--port", type=int, 
+                default=6379,
+                help="Set the listening port")
+    return parser.parse_args()
 
-def parse(command: str):
+
+def parse_input(command: str):
     return [
         w 
         for w in command.split('\r\n') 
@@ -33,7 +42,7 @@ async def get_response(command: str, store: KeyValueStore, *args):
 
 async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, store: KeyValueStore):
     while data := await reader.read(1024):
-        input = parse(data.decode())
+        input = parse_input(data.decode())
         command = input[0].upper()
         args = input[1:]
         response = await get_response(command, store, *args)
@@ -52,4 +61,5 @@ async def start_server(port: int, host: str = 'localhost'):
 
 
 if __name__ == "__main__":
-    asyncio.run(start_server(6379))
+    args = get_args()
+    asyncio.run(start_server(args.port))
