@@ -18,23 +18,27 @@ async def handle_client(
     reader: asyncio.StreamReader, 
     writer: asyncio.StreamWriter, 
     store: KeyValueStore, 
-    server_args: Namespace
+    state: KeyValueStore
 ):
     while data := await reader.read(1024):
         input = parse_input(data.decode())
         command = input[0].upper()
         args = input[1:]
-        response = await get_response(command, store, server_args, *args)
+        response = await get_response(command, store, state, *args)
         writer.write(response.encode('utf-8'))
         await writer.drain()
 
 
 async def start_server(args: Namespace):
     store = KeyValueStore()
+    state = KeyValueStore()
+    state.set('role', 'slave' if args.replicaof else 'master')
+    state.set('master_replid', '8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb')
+    state.set('master_repl_offset', 0)
     host = 'localhost'
     port = args.port
     server = await asyncio.start_server(
-        lambda r, w: handle_client(r, w, store, args), host, port
+        lambda r, w: handle_client(r, w, store, state), host, port
     )
     async with server:
         print(f"Listening on {host}, port: {port} ")

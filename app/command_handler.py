@@ -11,7 +11,11 @@ def parse_input(command: str):
     ]
 
 
-async def get_response(command: str, store: KeyValueStore, server_args: Namespace, *args):
+def str2bulk_string(value: str) -> str:
+    return f"${len(value)}\r\n{value}\r\n"
+
+
+async def get_response(command: str, store: KeyValueStore, state: KeyValueStore, *args) -> str:
     if command == 'ECHO':
         return f"+{args[0]}\r\n"
     
@@ -20,7 +24,11 @@ async def get_response(command: str, store: KeyValueStore, server_args: Namespac
         return f"+{value}\r\n" if value else "$-1\r\n"
     
     elif command == 'INFO':
-        return "$10\r\nrole:slave\r\n" if server_args.replicaof else "$11\r\nrole:master\r\n"
+        return str2bulk_string(
+            f"role:{state.get('role')}\n" +
+            f"master_replid:{state.get('master_replid')}\n" +
+            f"master_repl_offset:{state.get('master_repl_offset')}\n"
+        )
     
     elif command == 'PING':
         return "+PONG\r\n"
