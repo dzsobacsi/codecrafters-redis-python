@@ -2,7 +2,7 @@ from argparse import ArgumentParser, Namespace
 import asyncio
 import socket
 
-from app.command_handler import parse_input, get_response
+from app.client_handler import handle_client
 from app.keyvaluestore import KeyValueStore
 
 
@@ -16,24 +16,24 @@ def get_args() -> Namespace:
     return parser.parse_args()
 
 
-async def handle_client(
-    reader: asyncio.StreamReader, 
-    writer: asyncio.StreamWriter, 
-    store: KeyValueStore, 
-    state: KeyValueStore
-):
-    while data := await reader.read(1024):
-        input = parse_input(data.decode())
-        command = input[0].upper()
-        args = input[1:]
-        response = await get_response(command, store, state, *args)
-        writer.write(response.encode('utf-8'))
-        await writer.drain()
+def encode_command(command: str) -> bytes:
+    words = command.split()
+    response = f"*{len(words)}\r\n"
+    for word in words:
+        response += f"${len(word)}\r\n{word}\r\n"
+    return response.encode('utf-8')
 
 
 def handshake(args):
     connection = socket.create_connection(args.replicaof.split())
-    connection.sendall(b"*1\r\n$4\r\nPING\r\n")
+    connection.sendall(encode_command('PING'))
+    response = connection.recv(1024)
+
+    connection.sendall(encode_command(f'REPLCONF listening-port {args.port}'))
+    response = connection.recv(1024)
+
+    connection.sendall(encode_command('REPLCONF capa psync2'))
+    response = connection.recv(1024)
 
 
 async def start_server(args: Namespace):
@@ -46,7 +46,6 @@ async def start_server(args: Namespace):
     if args.replicaof:
         state.set('role', 'slave')
         handshake(args)
-
 
     host = 'localhost'
     port = args.port

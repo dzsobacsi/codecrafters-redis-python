@@ -1,4 +1,3 @@
-from argparse import Namespace
 import asyncio
 from app.keyvaluestore import KeyValueStore
 
@@ -11,11 +10,11 @@ def parse_input(command: str):
     ]
 
 
-def str2bulk_string(value: str) -> str:
-    return f"${len(value)}\r\n{value}\r\n"
-
-
 async def get_response(command: str, store: KeyValueStore, state: KeyValueStore, *args) -> str:
+    def str2bulk_string(value: str) -> str:
+        return f"${len(value)}\r\n{value}\r\n"
+
+
     if command == 'ECHO':
         return f"+{args[0]}\r\n"
     
@@ -32,6 +31,9 @@ async def get_response(command: str, store: KeyValueStore, state: KeyValueStore,
     
     elif command == 'PING':
         return "+PONG\r\n"
+    
+    elif command == 'REPLCONF':
+        return "+OK\r\n"
 
     elif command == 'SET':
         store.set(args[0], args[1])
@@ -40,6 +42,20 @@ async def get_response(command: str, store: KeyValueStore, state: KeyValueStore,
             asyncio.create_task(coro)
         return "+OK\r\n"
 
-    
-
     return "-ERR unknown command\r\n"
+
+
+async def handle_client(
+    reader: asyncio.StreamReader, 
+    writer: asyncio.StreamWriter, 
+    store: KeyValueStore, 
+    state: KeyValueStore
+):
+    while data := await reader.read(1024):
+        input = parse_input(data.decode())
+        command = input[0].upper()
+        args = input[1:]
+        print(f"Received request: {command} {args}")
+        response = await get_response(command, store, state, *args)
+        writer.write(response.encode('utf-8'))
+        await writer.drain()
