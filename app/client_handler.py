@@ -32,6 +32,9 @@ async def get_response(command: str, store: KeyValueStore, state: KeyValueStore,
     elif command == 'PING':
         return "+PONG\r\n"
     
+    elif command == 'PSYNC':
+        return "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n"
+    
     elif command == 'REPLCONF':
         return "+OK\r\n"
 
