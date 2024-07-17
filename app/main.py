@@ -35,6 +35,9 @@ def handshake(args):
     connection.sendall(encode_command('REPLCONF capa psync2'))
     response = connection.recv(1024)
 
+    connection.sendall(encode_command(f'PSYNC ? -1'))
+    response = connection.recv(1024)
+
 
 async def start_server(args: Namespace):
     store = KeyValueStore()
