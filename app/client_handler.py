@@ -1,6 +1,9 @@
 import asyncio
+import base64
 from app.keyvaluestore import KeyValueStore
 
+
+RDB_BASE64 = "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
 
 def parse_input(command: str):
     return [
@@ -33,7 +36,7 @@ async def get_response(command: str, store: KeyValueStore, state: KeyValueStore,
         return "+PONG\r\n"
     
     elif command == 'PSYNC':
-        return "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n"
+        return f"+FULLRESYNC {state.get('master_replid')} {state.get('master_repl_offset')}\r\n"
     
     elif command == 'REPLCONF':
         return "+OK\r\n"
@@ -60,5 +63,10 @@ async def handle_client(
         args = input[1:]
         print(f"Received request: {command} {args}")
         response = await get_response(command, store, state, *args)
-        writer.write(response.encode('utf-8'))
+        writer.write(response.encode())
+
+        if command == 'PSYNC':
+            rdb_file = base64.b64decode(RDB_BASE64)
+            writer.write(f"${len(rdb_file)}\r\n".encode() + rdb_file)
+            
         await writer.drain()

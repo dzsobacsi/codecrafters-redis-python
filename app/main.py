@@ -21,22 +21,22 @@ def encode_command(command: str) -> bytes:
     response = f"*{len(words)}\r\n"
     for word in words:
         response += f"${len(word)}\r\n{word}\r\n"
-    return response.encode('utf-8')
+    return response.encode()
 
 
 def handshake(args):
     connection = socket.create_connection(args.replicaof.split())
     connection.sendall(encode_command('PING'))
-    response = connection.recv(1024)
+    connection.recv(1024)
 
     connection.sendall(encode_command(f'REPLCONF listening-port {args.port}'))
-    response = connection.recv(1024)
+    connection.recv(1024)
 
     connection.sendall(encode_command('REPLCONF capa psync2'))
-    response = connection.recv(1024)
+    connection.recv(1024)
 
     connection.sendall(encode_command(f'PSYNC ? -1'))
-    response = connection.recv(1024)
+    connection.recv(1024)
 
 
 async def start_server(args: Namespace):
