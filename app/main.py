@@ -1,6 +1,5 @@
 from argparse import ArgumentParser, Namespace
 import asyncio
-#import socket
 
 from app.client_handler import handle_client
 from app.keyvaluestore import KeyValueStore
