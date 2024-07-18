@@ -40,9 +40,6 @@ async def get_response(command: str, store: KeyValueStore, state: KeyValueStore,
         return f"+FULLRESYNC {state.get('master_replid')} {state.get('master_repl_offset')}\r\n"
     
     elif command == 'REPLCONF':
-        if args[0] == 'listening-port':
-            print(f"Slave is connected with listening port {args[1]}")
-        
         return "+OK\r\n"
 
     elif command == 'SET':
@@ -50,7 +47,9 @@ async def get_response(command: str, store: KeyValueStore, state: KeyValueStore,
         if len(args) >= 4 and args[2].upper() == 'PX':
             coro = store.expire(args[0], int(args[3]))
             asyncio.create_task(coro)
-        return "+OK\r\n"
+
+        if state.get('role') == 'master':
+            return "+OK\r\n"
 
     return "-ERR unknown command\r\n"
 
@@ -66,11 +65,12 @@ async def handle_client(
         command = input[0].upper()
         args = input[1:]
         print(f"I am {state.get('role')}, listening on port {state.get('listening_port')}")
-        print(f"Received request: {command} {args}")
+        print(f"Received request: {command} {' '.join(args)}")
 
         if state.get('role') == 'master' and command in ['SET', 'DEL']:
             for slave_writer in state.get('connected_slaves'):
                 slave_writer.write(encode_command(command + ' ' + ' '.join(args)))
+                await slave_writer.drain()
 
         response = await get_response(command, store, state, *args)
         print(f"Sending response: {response}")

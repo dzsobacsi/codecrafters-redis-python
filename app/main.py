@@ -1,7 +1,7 @@
 from argparse import ArgumentParser, Namespace
 import asyncio
 
-from app.client_handler import handle_client
+from app.client_handler import get_response, handle_client, parse_input
 from app.keyvaluestore import KeyValueStore
 from app.utils import encode_command
 
@@ -16,9 +16,7 @@ def get_args() -> Namespace:
     return parser.parse_args()
 
 
-async def handshake(args):
-    reader, writer = await asyncio.open_connection(*args.replicaof.split())
-
+async def handshake(reader, writer, args):
     writer.write(encode_command('PING'))
     await reader.read(1024)
 
@@ -32,6 +30,24 @@ async def handshake(args):
     await reader.read(1024)
 
 
+async def listen_to_master(reader, store, state):
+    while data := await reader.read(1024):
+
+        inputs = [
+            parse_input('*' + inp) 
+            for inp in data.decode().split('*') 
+            if inp
+        ]
+        for input in inputs:
+            command = input[0].upper()
+            args = input[1:]
+
+            if command in ['SET', 'DEL']:
+                print(f"I am a replica, received command: {command} {' '.join(args)}")
+                await get_response(command, store, state, *args)
+                print(f"My new store is: {store.store}")
+
+
 async def start_server(args: Namespace):
     store = KeyValueStore()
     state = KeyValueStore()
@@ -43,7 +59,9 @@ async def start_server(args: Namespace):
 
     if args.replicaof:
         state.set('role', 'slave')
-        await handshake(args)
+        reader, writer = await asyncio.open_connection(*args.replicaof.split())
+        await handshake(reader, writer, args)
+        asyncio.create_task(listen_to_master(reader, store, state))
 
     host = 'localhost'
     port = args.port
