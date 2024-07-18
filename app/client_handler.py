@@ -1,7 +1,8 @@
 import asyncio
 import base64
-from app.keyvaluestore import KeyValueStore
 
+from app.keyvaluestore import KeyValueStore
+from app.utils import encode_command
 
 RDB_BASE64 = "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
 
@@ -39,6 +40,9 @@ async def get_response(command: str, store: KeyValueStore, state: KeyValueStore,
         return f"+FULLRESYNC {state.get('master_replid')} {state.get('master_repl_offset')}\r\n"
     
     elif command == 'REPLCONF':
+        if args[0] == 'listening-port':
+            print(f"Slave is connected with listening port {args[1]}")
+        
         return "+OK\r\n"
 
     elif command == 'SET':
@@ -61,12 +65,23 @@ async def handle_client(
         input = parse_input(data.decode())
         command = input[0].upper()
         args = input[1:]
+        print(f"I am {state.get('role')}, listening on port {state.get('listening_port')}")
         print(f"Received request: {command} {args}")
+
+        if state.get('role') == 'master' and command in ['SET', 'DEL']:
+            for slave_writer in state.get('connected_slaves'):
+                slave_writer.write(encode_command(command + ' ' + ' '.join(args)))
+
         response = await get_response(command, store, state, *args)
+        print(f"Sending response: {response}")
         writer.write(response.encode())
 
         if command == 'PSYNC':
+            my_slaves = state.get('connected_slaves')
+            my_slaves.append(writer)
+            state.set('connected_slaves', my_slaves)
+
             rdb_file = base64.b64decode(RDB_BASE64)
             writer.write(f"${len(rdb_file)}\r\n".encode() + rdb_file)
-            
+
         await writer.drain()

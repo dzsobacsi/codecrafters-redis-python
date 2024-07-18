@@ -1,9 +1,10 @@
 from argparse import ArgumentParser, Namespace
 import asyncio
-import socket
+#import socket
 
 from app.client_handler import handle_client
 from app.keyvaluestore import KeyValueStore
+from app.utils import encode_command
 
 
 def get_args() -> Namespace:
@@ -16,39 +17,34 @@ def get_args() -> Namespace:
     return parser.parse_args()
 
 
-def encode_command(command: str) -> bytes:
-    words = command.split()
-    response = f"*{len(words)}\r\n"
-    for word in words:
-        response += f"${len(word)}\r\n{word}\r\n"
-    return response.encode()
+async def handshake(args):
+    reader, writer = await asyncio.open_connection(*args.replicaof.split())
 
+    writer.write(encode_command('PING'))
+    await reader.read(1024)
 
-def handshake(args):
-    connection = socket.create_connection(args.replicaof.split())
-    connection.sendall(encode_command('PING'))
-    connection.recv(1024)
+    writer.write(encode_command(f'REPLCONF listening-port {args.port}'))
+    await reader.read(1024)
 
-    connection.sendall(encode_command(f'REPLCONF listening-port {args.port}'))
-    connection.recv(1024)
+    writer.write(encode_command('REPLCONF capa psync2'))
+    await reader.read(1024)
 
-    connection.sendall(encode_command('REPLCONF capa psync2'))
-    connection.recv(1024)
-
-    connection.sendall(encode_command(f'PSYNC ? -1'))
-    connection.recv(1024)
+    writer.write(encode_command(f'PSYNC ? -1'))
+    await reader.read(1024)
 
 
 async def start_server(args: Namespace):
     store = KeyValueStore()
     state = KeyValueStore()
     state.set('role', 'master')
+    state.set('listening_port', args.port)
     state.set('master_replid', '8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb')
     state.set('master_repl_offset', 0)
+    state.set('connected_slaves', [])
 
     if args.replicaof:
         state.set('role', 'slave')
-        handshake(args)
+        await handshake(args)
 
     host = 'localhost'
     port = args.port
